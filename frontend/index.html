@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>유튜브 mp4변환/편집기</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <header class="title-bar">유튜브 mp4변환/편집기</header>
+
+  <section class="panel">
+    <div class="url-row">
+      <input id="urlInput" type="text" placeholder="주소를 입력하세요" autocomplete="off" />
+      <button id="extractBtn" class="btn btn-primary">mp4변환</button>
+    </div>
+
+    <div id="progressBar" class="progress-bar">
+      <div id="progressFill" class="progress-fill"></div>
+      <span id="progressText" class="progress-text">주소를 입력하고 변환을 눌러주세요</span>
+    </div>
+
+    <div id="fileRow" class="file-row hidden">
+      <input id="fileNameInput" type="text" class="file-name-input" readonly />
+      <button id="renameBtn" class="btn btn-success">이름변경</button>
+      <button id="saveBtn" class="btn btn-primary">저장</button>
+    </div>
+  </section>
+
+  <section class="panel editor-panel">
+    <div class="title-bar sub-title-bar">오디오 편집기</div>
+
+    <div id="waveformWrap" class="waveform-wrap">
+      <div id="waveform"></div>
+      <div id="waveformPlaceholder" class="waveform-placeholder">재생 바</div>
+      <div id="timeLabels" class="time-labels hidden">
+        <span id="curTime">0:00</span>
+        <span id="totalTime">0:00</span>
+      </div>
+    </div>
+
+    <div class="editor-controls">
+      <button id="playBtn" class="btn btn-primary" disabled>재생</button>
+      <button id="resetBtn" class="btn btn-primary" disabled>되돌리기</button>
+      <button id="exportBtn" class="btn btn-primary" disabled>내보내기</button>
+      <button id="saveTrimBtn" class="btn btn-primary" disabled>저장하기</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast hidden"></div>
+</div>
+
+<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+<script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
