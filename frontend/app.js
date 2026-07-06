@@ -12,11 +12,16 @@ const waveformPlaceholder = document.getElementById("waveformPlaceholder");
 const timeLabels = document.getElementById("timeLabels");
 const curTimeEl = document.getElementById("curTime");
 const totalTimeEl = document.getElementById("totalTime");
+const seekBarWrap = document.getElementById("seekBarWrap");
+const seekBar = document.getElementById("seekBar");
 const playBtn = document.getElementById("playBtn");
 const resetBtn = document.getElementById("resetBtn");
 const exportBtn = document.getElementById("exportBtn");
 const saveTrimBtn = document.getElementById("saveTrimBtn");
 const toast = document.getElementById("toast");
+
+const SEEK_BAR_MAX = 1000;
+let isSeekDragging = false;
 
 let currentJobId = null;
 let currentFilename = "";
@@ -102,9 +107,22 @@ async function handleExtract() {
   }
 }
 
+function updatePlayIcon(playing) {
+  playBtn.textContent = playing ? "⏸" : "▶";
+}
+
+function updateTimeDisplay(t) {
+  curTimeEl.textContent = formatTime(t);
+  if (!isSeekDragging) {
+    const duration = wavesurfer.getDuration() || 1;
+    seekBar.value = Math.round((t / duration) * SEEK_BAR_MAX);
+  }
+}
+
 async function loadWaveform(audioUrl) {
   waveformPlaceholder.classList.add("hidden");
   timeLabels.classList.remove("hidden");
+  seekBarWrap.classList.remove("hidden");
 
   if (wavesurfer) {
     wavesurfer.destroy();
@@ -131,6 +149,7 @@ async function loadWaveform(audioUrl) {
   const duration = wavesurfer.getDuration();
   totalTimeEl.textContent = formatTime(duration);
   curTimeEl.textContent = "0:00";
+  seekBar.value = 0;
 
   activeRegion = regionsPlugin.addRegion({
     start: 0,
@@ -142,39 +161,56 @@ async function loadWaveform(audioUrl) {
 
   regionsPlugin.on("region-updated", (region) => {
     activeRegion = region;
+    // 트림 영역을 조절했을 때 재생/커서 위치가 새 영역을 자연스럽게 따라가도록 함
+    const current = wavesurfer.getCurrentTime();
+    const outOfRange = current < region.start || current > region.end;
+    const wasPlaying = wavesurfer.isPlaying();
+
+    if (outOfRange) {
+      wavesurfer.setTime(region.start);
+      updateTimeDisplay(region.start);
+      if (wasPlaying) {
+        wavesurfer.play(region.start, region.end);
+      }
+    } else if (wasPlaying) {
+      // 재생 중 영역 끝(stopAtPosition)이 바뀐 경우를 반영하기 위해 같은 위치에서 재생을 갱신
+      wavesurfer.play(current, region.end);
+    }
   });
 
-  wavesurfer.on("audioprocess", () => {
-    curTimeEl.textContent = formatTime(wavesurfer.getCurrentTime());
+  wavesurfer.on("audioprocess", (t) => {
+    updateTimeDisplay(t);
   });
 
   wavesurfer.on("interaction", () => {
-    curTimeEl.textContent = formatTime(wavesurfer.getCurrentTime());
+    updateTimeDisplay(wavesurfer.getCurrentTime());
   });
 
-  wavesurfer.on("finish", () => {
-    playBtn.textContent = "재생";
-  });
+  wavesurfer.on("play", () => updatePlayIcon(true));
+  wavesurfer.on("pause", () => updatePlayIcon(false));
+  wavesurfer.on("finish", () => updatePlayIcon(false));
 
   playBtn.disabled = false;
   resetBtn.disabled = false;
-  exportBtn.disabled = false;
   saveTrimBtn.disabled = false;
-  playBtn.textContent = "재생";
+  exportBtn.disabled = true;
+  updatePlayIcon(false);
 }
 
 function togglePlay() {
   if (!wavesurfer) return;
   if (wavesurfer.isPlaying()) {
     wavesurfer.pause();
-    playBtn.textContent = "재생";
   } else {
+    const current = wavesurfer.getCurrentTime();
     if (activeRegion) {
-      wavesurfer.play(activeRegion.start, activeRegion.end);
+      const startFrom = current >= activeRegion.start && current < activeRegion.end
+        ? current
+        : activeRegion.start;
+      wavesurfer.play(startFrom, activeRegion.end);
     } else {
       wavesurfer.play();
     }
-    playBtn.textContent = "정지";
   }
 }
 
@@ -192,6 +228,26 @@ function resetRegion() {
     resize: true,
   });
   showToast("트림 영역을 초기화했습니다");
+}
+
+function handleSeekInput() {
+  if (!wavesurfer) return;
+  isSeekDragging = true;
+  const duration = wavesurfer.getDuration() || 0;
+  const t = (seekBar.value / SEEK_BAR_MAX) * duration;
+  curTimeEl.textContent = formatTime(t);
+}
+
+function handleSeekCommit() {
+  if (!wavesurfer) return;
+  const duration = wavesurfer.getDuration() || 0;
+  let t = (seekBar.value / SEEK_BAR_MAX) * duration;
+  if (activeRegion) {
+    t = Math.min(Math.max(t, activeRegion.start), activeRegion.end);
+  }
+  wavesurfer.setTime(t);
+  updateTimeDisplay(t);
+  isSeekDragging = false;
 }
 
 async function trimOnServer() {
@@ -213,10 +269,10 @@ async function trimOnServer() {
 }
 
 async function handleExport() {
+  if (!audioObjectUrl) return;
   exportBtn.disabled = true;
   try {
-    const blob = await trimOnServer();
-    if (!blob) return;
+    const blob = await (await fetch(audioObjectUrl)).blob();
 
     const filename = fileNameInput.value || "trimmed_audio.mp3";
     const file = new File([blob], filename, { type: "audio/mpeg" });
@@ -243,7 +299,7 @@ async function handleExport() {
   } catch (err) {
     showToast(err.message || "내보내기 실패");
   } finally {
-    exportBtn.disabled = false;
+    exportBtn.disabled = !audioObjectUrl;
   }
 }
 
@@ -258,7 +314,8 @@ async function handleSaveTrim() {
     }
     audioObjectUrl = URL.createObjectURL(blob);
     await loadWaveform(audioObjectUrl);
-    showToast("편집 내용을 저장하고 편집기에 반영했습니다");
+    exportBtn.disabled = false;
+    showToast("편집 내용을 저장했습니다. 이제 내보내기를 사용할 수 있습니다");
   } catch (err) {
     showToast(err.message || "저장 실패");
   } finally {
@@ -333,3 +390,5 @@ playBtn.addEventListener("click", togglePlay);
 resetBtn.addEventListener("click", resetRegion);
 exportBtn.addEventListener("click", handleExport);
 saveTrimBtn.addEventListener("click", handleSaveTrim);
+seekBar.addEventListener("input", handleSeekInput);
+seekBar.addEventListener("change", handleSeekCommit);
