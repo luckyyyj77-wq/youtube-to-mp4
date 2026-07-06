@@ -27,7 +27,7 @@ app.add_middleware(
 )
 
 YOUTUBE_URL_RE = re.compile(
-    r"^(https?://)?(www\.)?(youtube\.com/(watch\?v=|shorts/)|youtu\.be/)[\w\-]+"
+    r"^(https?://)?(www\.|m\.|music\.)?(youtube\.com/(watch\?v=|shorts/|live/)|youtu\.be/)[\w\-]+"
 )
 
 
