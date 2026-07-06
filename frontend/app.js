@@ -211,9 +211,25 @@ async function handleExport() {
   try {
     const blob = await trimOnServer();
     if (!blob) return;
+
+    const filename = fileNameInput.value || "trimmed_audio.mp3";
+    const file = new File([blob], filename, { type: "audio/mpeg" });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        showToast("공유 시트로 내보냈습니다");
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = fileNameInput.value || "trimmed_audio.mp3";
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
