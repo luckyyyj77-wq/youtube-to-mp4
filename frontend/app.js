@@ -320,6 +320,13 @@ extractBtn.addEventListener("click", handleExtract);
 urlInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") handleExtract();
 });
+urlInput.addEventListener("focus", () => urlInput.select());
+urlInput.addEventListener("touchend", (e) => {
+  if (document.activeElement === urlInput) {
+    e.preventDefault();
+    urlInput.select();
+  }
+});
 renameBtn.addEventListener("click", handleRename);
 saveBtn.addEventListener("click", handleSave);
 playBtn.addEventListener("click", togglePlay);
