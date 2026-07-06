@@ -3,47 +3,66 @@
 유튜브 링크에서 오디오를 추출하고, 바로 파형에서 구간을 잘라 편집·저장할 수 있는 개인용 웹앱입니다.
 
 - **프론트엔드**: 정적 HTML/CSS/JS + [WaveSurfer.js](https://wavesurfer.xyz/) — GitHub Pages로 배포
-- **백엔드**: FastAPI + yt-dlp + ffmpeg — Render.com 무료 플랜으로 배포
+- **백엔드**: FastAPI + yt-dlp + ffmpeg — **본인 PC에서 로컬로 실행**
 
 ## 배포 링크
 
 - 웹앱: https://luckyyyj77-wq.github.io/youtube-to-mp4/
 
+> 클라우드(Render 등) 서버 IP는 유튜브가 봇으로 차단("Sign in to confirm you're not a bot")하는 경우가
+> 많아, 백엔드는 개인 PC에서 직접 실행하는 방식으로 운영합니다. 웹앱 페이지는 그대로 GitHub Pages에
+> 접속하고, 오디오 추출/편집 요청만 로컬 PC의 백엔드(`http://localhost:8000`)로 보냅니다.
+> **웹앱을 쓰려면 먼저 아래 방법으로 로컬 백엔드를 켜두어야 합니다.**
+
 ## 구조
 
 ```
 frontend/   GitHub Pages로 배포되는 정적 웹앱
-backend/    Render.com에 Docker로 배포되는 API 서버
+backend/    본인 PC에서 실행하는 API 서버 (FastAPI + yt-dlp + ffmpeg)
 ```
 
-## 백엔드 배포 방법 (Render.com)
+## 사용 방법 (매번 사용할 때)
 
-1. [render.com](https://render.com) 가입 후 New > Web Service
-2. 이 저장소 연결, Root Directory를 `backend`로 지정
-3. Environment: Docker 선택 (Dockerfile 자동 인식)
-4. Instance Type: Free 선택 후 배포
-5. 배포 완료 후 발급된 URL(예: `https://xxxx.onrender.com`)을
-   `frontend/config.js`의 `API_BASE_URL`에 붙여넣고 커밋/푸시
+### 1. 로컬 백엔드 켜기
 
-무료 플랜은 일정 시간 미사용 시 슬립 상태가 되며, 첫 요청 시 콜드스타트로
-30~60초 정도 걸릴 수 있습니다. 개인용으로는 충분합니다.
-
-## 로컬 실행
-
-### 백엔드
+최초 1회만 준비:
 ```bash
 cd backend
+python -m venv .venv
+.venv\Scripts\activate       # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn main:app --reload
 ```
-(ffmpeg가 로컬에 설치되어 있어야 합니다)
+(ffmpeg가 PC에 설치되어 있어야 합니다: https://ffmpeg.org/download.html)
 
-### 프론트엔드
+이후 사용할 때마다:
+```bash
+cd backend
+.venv\Scripts\activate
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+`http://localhost:8000/api/health` 접속 시 `{"status":"ok"}`가 뜨면 준비 완료.
+
+### 2. 웹앱 접속
+
+브라우저에서 https://luckyyyj77-wq.github.io/youtube-to-mp4/ 접속 (백엔드가 켜져 있는 동안만 동작).
+
+## 로컬에서 프론트엔드까지 함께 테스트하고 싶을 때
+
 ```bash
 cd frontend
 python -m http.server 8080
 ```
-`config.js`의 `API_BASE_URL`을 로컬 백엔드 주소(`http://localhost:8000`)로 바꿔서 테스트하세요.
+`http://localhost:8080` 접속. `config.js`는 이미 `http://localhost:8000`을 가리키도록 설정되어 있습니다.
+
+## yt-dlp 관련 참고
+
+유튜브 쪽 정책/포맷 변경이 잦아 `yt-dlp`가 오래되면 추출이 실패할 수 있습니다.
+문제가 생기면 아래처럼 최신 버전으로 업그레이드하세요.
+```bash
+cd backend
+.venv\Scripts\activate
+pip install -U yt-dlp
+```
 
 ## 주의사항
 
