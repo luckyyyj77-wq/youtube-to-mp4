@@ -65,6 +65,7 @@ async function handleExtract() {
     setProgress(fakeProgress, `변환중.....${Math.floor(fakeProgress)}%`);
   }, 500);
 
+  let data = null;
   try {
     const res = await fetch(`${API_BASE_URL}/api/extract`, {
       method: "POST",
@@ -74,7 +75,7 @@ async function handleExtract() {
 
     clearInterval(progressTimer);
 
-    const data = await res.json();
+    data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || "변환 실패");
     }
@@ -84,15 +85,20 @@ async function handleExtract() {
     currentFilename = data.filename;
     fileNameInput.value = currentFilename;
     fileRow.classList.remove("hidden");
-
-    await loadWaveform(`${API_BASE_URL}${data.audio_url}`);
-    showToast("음원 추출 완료");
   } catch (err) {
     clearInterval(progressTimer);
     setProgress(0, "추출 실패");
     showToast(err.message || "추출 실패");
-  } finally {
     extractBtn.disabled = false;
+    return;
+  }
+  extractBtn.disabled = false;
+
+  try {
+    await loadWaveform(`${API_BASE_URL}${data.audio_url}`);
+    showToast("음원 추출 완료");
+  } catch (err) {
+    showToast("추출은 성공했지만 편집기 로딩에 실패했습니다. 저장/공유는 가능합니다.");
   }
 }
 
@@ -274,20 +280,39 @@ function handleRename() {
 
 async function handleSave() {
   if (!currentJobId) return;
+  saveBtn.disabled = true;
   try {
     const url = audioObjectUrl || `${API_BASE_URL}/api/audio/${currentJobId}`;
     const blob = audioObjectUrl
       ? await (await fetch(audioObjectUrl)).blob()
       : await (await fetch(url)).blob();
+
+    const filename = fileNameInput.value || currentFilename;
+    const file = new File([blob], filename, { type: "audio/mpeg" });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        showToast("공유 시트로 저장했습니다");
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = fileNameInput.value || currentFilename;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
     showToast("저장되었습니다");
   } catch (err) {
     showToast("저장 실패");
+  } finally {
+    saveBtn.disabled = false;
   }
 }
 
