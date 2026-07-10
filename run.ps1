@@ -26,16 +26,22 @@ if ($existing) {
 }
 
 Write-Host "[run] 백엔드를 새 창에서 실행합니다 (http://localhost:8000)" -ForegroundColor Green
+$backendLauncher = Join-Path $env:TEMP "youtube_to_mp4_backend_launch.ps1"
+@"
+Set-Location -LiteralPath '$backendDir'
+& '$venvActivate'
+uvicorn main:app --host 0.0.0.0 --port 8000
+"@ | Set-Content -Path $backendLauncher -Encoding UTF8
+
 Start-Process powershell -ArgumentList @(
-    "-NoExit", "-Command",
-    "cd '$backendDir'; & '$venvActivate'; uvicorn main:app --host 0.0.0.0 --port 8000"
+    "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$backendLauncher`""
 )
 
 Write-Host "[wait] 백엔드가 뜰 때까지 대기 중..." -ForegroundColor Yellow
 $ready = $false
 for ($i = 0; $i -lt 30; $i++) {
     try {
-        $res = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 2
+        $res = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
         if ($res.StatusCode -eq 200) { $ready = $true; break }
     } catch {}
     Start-Sleep -Seconds 1
@@ -98,18 +104,23 @@ Write-Host ""
 
 $configPath = Join-Path $root "frontend\config.js"
 $currentConfig = Get-Content $configPath -Raw -ErrorAction SilentlyContinue
-$currentUrlMatch = [regex]::Match($currentConfig, 'https://[a-zA-Z0-9\-\.]+')
-$currentUrl = if ($currentUrlMatch.Success) { $currentUrlMatch.Value } else { "" }
+$currentUrlMatch = [regex]::Match($currentConfig, 'TUNNEL_API_BASE_URL\s*=\s*"(https://[a-zA-Z0-9\-\.]+)"')
+$currentUrl = if ($currentUrlMatch.Success) { $currentUrlMatch.Groups[1].Value } else { "" }
 
 if ($currentUrl -eq $tunnelUrl) {
     Write-Host "[info] frontend/config.js가 이미 이 주소를 사용 중입니다. 수정할 필요 없습니다." -ForegroundColor Green
 } else {
     Write-Host "[action] frontend/config.js의 주소를 새 터널 주소로 자동 업데이트합니다..." -ForegroundColor Yellow
-    $newConfig = "const API_BASE_URL = `"$tunnelUrl`";`n"
+    $newConfig = @"
+const TUNNEL_API_BASE_URL = "$tunnelUrl";
+const API_BASE_URL = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+  ? "http://localhost:8000"
+  : TUNNEL_API_BASE_URL;
+"@
     Set-Content -Path $configPath -Value $newConfig -NoNewline
     Write-Host "[ok] config.js 업데이트 완료." -ForegroundColor Green
     Write-Host ""
-    Write-Host "  이제 아래 명령으로 GitHub에 반영(push)해야 웹앱이 새 주소를 사용합니다:" -ForegroundColor Cyan
+    Write-Host "  모바일 등 외부 접속용 웹앱에 반영하려면 아래 명령으로 GitHub에 push하세요:" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "    git add frontend/config.js" -ForegroundColor White
     Write-Host "    git commit -m `"update backend tunnel url`"" -ForegroundColor White
@@ -117,7 +128,38 @@ if ($currentUrl -eq $tunnelUrl) {
     Write-Host ""
 }
 
-Write-Host "이 창을 닫으면 터널이 종료됩니다. 사용을 마칠 때까지 그대로 두세요." -ForegroundColor Magenta
+Write-Host "=== 3/3 로컬 프론트엔드 서버 시작 ===" -ForegroundColor Cyan
+$frontendDir = Join-Path $root "frontend"
+$frontendPort = 5500
+
+$existingFrontend = Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue
+if ($existingFrontend) {
+    Write-Host "[cleanup] 기존 프론트엔드 프로세스를 종료합니다 (PID: $($existingFrontend.OwningProcess))" -ForegroundColor Yellow
+    Stop-Process -Id $existingFrontend.OwningProcess -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
+$frontendLauncher = Join-Path $env:TEMP "youtube_to_mp4_frontend_launch.ps1"
+@"
+Set-Location -LiteralPath '$frontendDir'
+python -m http.server $frontendPort
+"@ | Set-Content -Path $frontendLauncher -Encoding UTF8
+
+Start-Process powershell -ArgumentList @(
+    "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$frontendLauncher`""
+)
+
+Start-Sleep -Seconds 1
+$localUrl = "http://localhost:$frontendPort"
+Write-Host "[ok] 로컬 웹앱 주소: $localUrl" -ForegroundColor Green
+Start-Process $localUrl
+
+Write-Host ""
+Write-Host "  이 PC에서만 쓸 때는 방금 열린 브라우저 창($localUrl)을 사용하세요." -ForegroundColor Cyan
+Write-Host "  외부/모바일 접속이 필요할 때만 위에 안내된 GitHub push 후 아래 주소를 쓰세요:" -ForegroundColor Cyan
+Write-Host "    https://luckyyyj77-wq.github.io/youtube-to-mp4/" -ForegroundColor White
+Write-Host ""
+Write-Host "새로 열린 백엔드 창, 프론트엔드 창, 터널 창을 닫지 마세요. 닫으면 해당 기능이 중단됩니다." -ForegroundColor Magenta
 Write-Host ""
 
 try {
