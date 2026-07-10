@@ -69,8 +69,15 @@ if (-not $cloudflared) {
     exit 1
 }
 
+$existingTunnel = Get-Process cloudflared -ErrorAction SilentlyContinue
+if ($existingTunnel) {
+    Write-Host "[cleanup] 기존 터널 프로세스를 종료합니다 (PID: $($existingTunnel.Id -join ', '))" -ForegroundColor Yellow
+    $existingTunnel | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
 $logFile = Join-Path $env:TEMP "cloudflared_tunnel.log"
-if (Test-Path $logFile) { Remove-Item $logFile -Force }
+if (Test-Path $logFile) { Remove-Item $logFile -Force -ErrorAction SilentlyContinue }
 
 $tunnelProcess = Start-Process -FilePath $cloudflared `
     -ArgumentList "tunnel", "--url", "http://localhost:8000" `
